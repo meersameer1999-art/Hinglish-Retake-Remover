@@ -33,6 +33,27 @@ python app.py
 
 Output: `saaf_audio.mp3` — retakes hataye hue saaf audio.
 
+## Video editing workflow mein integration
+
+Agar aap raw video dete hain to editing workflow (`.opencode/skills/ai-video-editor`) ab **audio-first**
+chalta hai — bilkul aapke order mein:
+
+```
+python ".opencode/skills/ai-video-editor/scripts/audio_first.py" "raw_video.mp4" --lang hi-roman --style warm-canvas
+```
+
+1. Raw video se audio extract + Whisper transcription (retake dhoondhne ke liye).
+2. Is repo wali logic (`thefuzz.fuzz.ratio`, threshold 70, best/last take) se retakes + silent parts hataye
+   jate hain → `WORK/clean_audio.mp3` (final audio) aur `WORK/keep_ranges.json` (frame-exact cut map).
+3. Us **final audio** par dobara speech-to-text → `WORK/transcript_edited.txt` = saaf script aur scene timings.
+4. `cut_from_audio.py` us map se video cut karta hai aur final MP3 ko as-is mux karta hai — video aur audio
+   ek hi timeline par rehte hain, desync nahi hota. Phir graphics/captions/render.
+
+Options: `--threshold 70`, `--keep best|last`, `--pause 0.3`, `--min-gap 0.6`, `--no-silence`,
+`--model NAME`, `--no-cut` (sirf audio + script chahiye). Hinglish (Roman letters) ke liye `--lang hi-roman`.
+
+Agar aapko sirf audio chahiye (video nahi), to `app.py` waisa hi seedha `saaf_audio.mp3` banata hai.
+
 ## Customize karna
 
 - **Similarity threshold**: `app.py` mein `similarity > 70` ko badal kar retake detection ko strict ya loose kar sakte hain.
