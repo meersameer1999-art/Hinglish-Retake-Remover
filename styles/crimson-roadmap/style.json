@@ -1,0 +1,16 @@
+{
+ "id": "crimson-roadmap",
+ "title": "Crimson Roadmap",
+ "family": "Cinematic Explainer",
+ "fonts": [
+  "700 96px \"Playfair Display\"",
+  "600 26px \"Playfair Display\"",
+  "italic 600 20px \"Playfair Display\"",
+  "800 46px \"Archivo\"",
+  "italic 400 21px \"Instrument Serif\"",
+  "600 20px \"IBM Plex Mono\""
+ ],
+ "demo_duration": 36.0,
+ "demo_still": 7.0,
+ "has_aroll": false
+}

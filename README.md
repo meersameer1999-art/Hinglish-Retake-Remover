@@ -13,44 +13,54 @@ Kayi baar recording ke dauran ek hi dialogue baar baar bola jata hai — pehla t
 
 ## Files
 
-- `app.py` — Poori cleaning logic (Whisper + thefuzz + pydub).
-- `requirements.txt` — Python dependencies.
+- `app.py` — Poori audio-only cleaning logic (Whisper + thefuzz + pydub).
+- `scripts/` — Complete audio-first video workflow (self-contained; kisi aur skill folder par depend nahi karta).
+- `styles/`, `engine/`, `assets/`, `references/` — Motion graphics render ke liye style library aur engine.
+- `WORKFLOW.md` — Editing workflow ki puri guide (steps 5-7: story.js, stills, final render).
+- `requirements.txt` — Saari Python dependencies (audio + video dono ke liye).
 - `README.md` — Ye introduction aur setup guide.
 
-## Setup
+## Setup (fresh clone ke liye)
 
-> Note: Whisper ko MP3/podcast decode karne ke liye system par **ffmpeg** install hona zaroori hai.
+> Note: Whisper aur video cutting ke liye system par **ffmpeg** install hona zaroori hai.
 
 ```bash
 # 1. Dependencies install karein
 pip install -r requirements.txt
+python scripts/setup.py            # check + missing packages/browser install
 
-# 2. Apni audio file ko app.py ke saath rakhkar naam dein: mera_audio.mp3
+# 2. Sirf audio chahiye: apni MP3 ka naam `mera_audio.mp3` rakhein
+python app.py                      # output: saaf_audio.mp3
 
-# 3. Script chalayein
-python app.py
+# 3. Raw video chahiye: audio-first pipeline
+python scripts/audio_first.py "raw_video.mp4" --lang hi-roman --style warm-canvas --captions no
 ```
 
-Output: `saaf_audio.mp3` — retakes hataye hue saaf audio.
+`setup.py --check` sirf report deta hai (kuch install nahi karta). Graphics render ke liye playwright
+chromium bhi setup.py hi download karta hai.
 
-## Video editing workflow mein integration
+## Video editing workflow (audio-first, isi repo mein)
 
-Agar aap raw video dete hain to editing workflow (`.opencode/skills/ai-video-editor`) ab **audio-first**
-chalta hai — bilkul aapke order mein:
+Pipeline bilkul aapke order mein chalti hai:
 
 ```
-python ".opencode/skills/ai-video-editor/scripts/audio_first.py" "raw_video.mp4" --lang hi-roman --style warm-canvas
+python scripts/audio_first.py "raw_video.mp4" --lang hi-roman --style warm-canvas --captions no
 ```
 
 1. Raw video se audio extract + Whisper transcription (retake dhoondhne ke liye).
-2. Is repo wali logic (`thefuzz.fuzz.ratio`, threshold 70, best/last take) se retakes + silent parts hataye
-   jate hain → `WORK/clean_audio.mp3` (final audio) aur `WORK/keep_ranges.json` (frame-exact cut map).
+2. Is repo wali logic (`thefuzz.fuzz.ratio`, threshold 70, best/last take, plus intra-segment repeats) se
+   retakes + lambi khamoshiyan hatayi jati hain → `WORK/clean_audio.mp3` (final audio) aur
+   `WORK/keep_ranges.json` (frame-exact cut map).
 3. Us **final audio** par dobara speech-to-text → `WORK/transcript_edited.txt` = saaf script aur scene timings.
 4. `cut_from_audio.py` us map se video cut karta hai aur final MP3 ko as-is mux karta hai — video aur audio
-   ek hi timeline par rehte hain, desync nahi hota. Phir graphics/captions/render.
+   ek hi timeline par rehte hain, desync nahi hota. Output: `WORK/cut.mp4` (raw cut).
+5. Phir `WORKFLOW.md` ke steps 5-7: `story.js` → `render.py WORK --check/--stills` → `render.py WORK`
+   = `WORK/final.mp4`.
 
-Options: `--threshold 70`, `--keep best|last`, `--pause 0.3`, `--min-gap 0.6`, `--no-silence`,
-`--model NAME`, `--no-cut` (sirf audio + script chahiye). Hinglish (Roman letters) ke liye `--lang hi-roman`.
+Options: `--threshold 70`, `--intra-threshold 80`, `--keep best|last`, `--pause 0.3`, `--min-gap 0.6`,
+`--no-silence`, `--model NAME`, `--skip-stt`, `--no-cut`, `--height 2160`. Hinglish (Roman letters) ke liye
+`--lang hi-roman`. Manually koi hissa hatana ho to `WORK/edits.json` mein `{"remove_times": [[start, end]]}`
+likh kar `clean_audio.py` + `cut_from_audio.py` dobara chalayein.
 
 Agar aapko sirf audio chahiye (video nahi), to `app.py` waisa hi seedha `saaf_audio.mp3` banata hai.
 

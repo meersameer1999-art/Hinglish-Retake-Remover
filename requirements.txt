@@ -1,3 +1,10 @@
+# For app.py (audio-only cleaning)
 openai-whisper
-thefuzz
 pydub
+thefuzz
+
+# For the audio-first video workflow in scripts/
+faster-whisper>=1.1
+numpy
+pillow
+playwright>=1.40
