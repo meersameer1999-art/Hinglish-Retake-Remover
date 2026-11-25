@@ -39,6 +39,17 @@ python scripts/audio_first.py "raw_video.mp4" --lang hi-roman --style warm-canva
 `setup.py --check` sirf report deta hai (kuch install nahi karta). Graphics render ke liye playwright
 chromium bhi setup.py hi download karta hai.
 
+## Ek command mein FINAL video (recommended)
+
+```bash
+python scripts/final_cut.py "raw_video.mp4" --lang hi-roman --style warm-canvas --captions no
+```
+
+Ye ak hi command mein karta hai: retakes (segment + andar wale), lambi silences (waveform se refine),
+final audio par speech-to-text, sync `cut.mp4`, auto scene cards, aur high-quality render.
+Output: `<video name>_final/final.mp4`. Default quality `--preset slow --crf 17` hai.
+Agar audio/cut pehle se tayyar hai to `--from-cut` lagayein; `--skip-stt` se purana script reuse hota hai.
+
 ## Video editing workflow (audio-first, isi repo mein)
 
 Pipeline bilkul aapke order mein chalti hai:

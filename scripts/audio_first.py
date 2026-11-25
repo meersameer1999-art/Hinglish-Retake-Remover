@@ -47,6 +47,7 @@ def main():
     ap.add_argument("--captions", choices=["yes", "no"])
     ap.add_argument("--height", type=int)
     ap.add_argument("--threshold", type=int, default=70)
+    ap.add_argument("--intra-threshold", type=int, default=80, help="fuzzy match for repeats inside one segment")
     ap.add_argument("--keep", choices=["best", "last"], default="best")
     ap.add_argument("--pause", type=float, default=0.3)
     ap.add_argument("--min-gap", type=float, default=0.6)
@@ -72,7 +73,7 @@ def main():
     call("transcribe.py", src, "--work", work, "--lang", a.lang, *common_args)
 
     # 2. Fuzzy repeated-take detection -> edits.json.
-    call("detect_retakes.py", work, "--threshold", a.threshold, "--keep", a.keep)
+    call("detect_retakes.py", work, "--threshold", a.threshold, "--intra-threshold", a.intra_threshold, "--keep", a.keep)
 
     # 3. Clean audio + frame-exact keep map.
     clean_args = ["--pause", a.pause, "--min-gap", a.min_gap, "--source", src]
