@@ -58,6 +58,7 @@ python scripts/audio_first.py "raw_video.mp4" --lang hi-roman --style warm-canva
    = `WORK/final.mp4`.
 
 Options: `--threshold 70`, `--intra-threshold 80`, `--keep best|last`, `--pause 0.3`, `--min-gap 0.6`,
+`--waveform --silence-db -40` (transcript gaps ko waveform se refine karega — words ke andar cut nahi karta),
 `--no-silence`, `--model NAME`, `--skip-stt`, `--no-cut`, `--height 2160`. Hinglish (Roman letters) ke liye
 `--lang hi-roman`. Manually koi hissa hatana ho to `WORK/edits.json` mein `{"remove_times": [[start, end]]}`
 likh kar `clean_audio.py` + `cut_from_audio.py` dobara chalayein.

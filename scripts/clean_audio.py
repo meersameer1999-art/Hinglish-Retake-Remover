@@ -7,6 +7,7 @@ map later so the video frames and the cleaned audio stay in perfect sync.
 
 Usage:
   python clean_audio.py WORK [--pause 0.3] [--min-gap 0.6] [--no-silence] [--source VIDEO]
+                            [--waveform] [--silence-db -40]
 """
 import argparse
 import json
@@ -37,6 +38,42 @@ def build_clean_pcm(audio, frames, fps):
     return np.clip(np.vstack(parts), -1, 1) if parts else np.zeros((0, 2), np.float32)
 
 
+def waveform_db(audio, frame_s=0.02):
+    """20 ms RMS levels (dBFS) of the source audio, for waveform-based silence refinement."""
+    x = np.asarray(audio, dtype=np.float32)
+    if x.ndim == 2:
+        x = x.mean(axis=1)
+    n = int(SR * frame_s)
+    x = x[: (len(x) // n) * n]
+    if not len(x):
+        return np.zeros((0,), np.float32)
+    return (20 * np.log10(np.sqrt((x.reshape(-1, n) ** 2).mean(axis=1)) + 1e-8)).astype(np.float32)
+
+
+def refine_with_waveform(s, e, db, frame_s, threshold, min_gap):
+    """Shrink a transcript silence to its quietest continuous waveform part.
+
+    [s, e] is already between two kept words, so refinement can only SHRINK the cut —
+    it never moves a cut into speech, even when the room has a high noise floor.
+    """
+    i0, i1 = max(0, int(s / frame_s)), min(len(db), int(e / frame_s))
+    if i1 - i0 < max(1, int(min_gap / frame_s)):
+        return [s, e]
+    mask = db[i0:i1] < threshold
+    edges = np.diff(np.r_[False, mask, False].astype(np.int8))
+    best = None
+    for a, b in zip(np.where(edges == 1)[0], np.where(edges == -1)[0]):
+        secs = (b - a) * frame_s
+        if secs >= min_gap and (best is None or secs > best[1]):
+            best = (a, secs, b)
+    if best is None:
+        return [s, e]
+    ns, ne = s + best[0] * frame_s, s + best[2] * frame_s
+    if ne - ns < min_gap:
+        return [s, e]
+    return [round(ns, 3), round(ne, 3)]
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("work")
@@ -44,6 +81,8 @@ def main():
     ap.add_argument("--pause", type=float, default=0.3, help="seconds of pause left where a long silence was removed")
     ap.add_argument("--min-gap", type=float, default=0.6, help="silences shorter than this are kept")
     ap.add_argument("--no-silence", action="store_true", help="remove retakes only, keep all silences")
+    ap.add_argument("--waveform", action="store_true", help="refine transcript silences with the waveform (never cuts inside words)")
+    ap.add_argument("--silence-db", type=float, default=-40.0, help="waveform silence threshold in dBFS (default: -40)")
     a = ap.parse_args()
 
     work = os.path.abspath(a.work)
@@ -61,6 +100,7 @@ def main():
 
     audio = load_audio(src)
     duration = min(info["duration"], len(audio) / SR) if len(audio) else info["duration"]
+    db, frame_s = waveform_db(audio), 0.02
     ed_path = os.path.join(work, "edits.json")
     edits = json.load(open(ed_path, encoding="utf-8")) if os.path.exists(ed_path) else {}
     gone = set()
@@ -76,17 +116,22 @@ def main():
     silences = []
     if not a.no_silence:
         pad = a.pause / 2
+
+        def add_silence(s, e):
+            s, e = max(0.0, s), min(duration, e)
+            if a.waveform:
+                s, e = refine_with_waveform(s, e, db, frame_s, a.silence_db, a.min_gap)
+            if e - s >= a.min_gap:
+                silences.append([s, e])
+
         kept_words = [w for w in tr["words"] if w["i"] not in gone]
         if kept_words:
-            if kept_words[0]["s"] - pad >= a.min_gap:
-                silences.append([0.0, max(0.0, kept_words[0]["s"] - pad)])
+            add_silence(0.0, kept_words[0]["s"] - pad)
             for prev, nxt in zip(kept_words, kept_words[1:]):
-                s, e = prev["e"] + pad, nxt["s"] - pad
-                if e - s >= a.min_gap:
-                    silences.append([s, e])
-            if duration - (kept_words[-1]["e"] + pad) >= a.min_gap:
-                silences.append([kept_words[-1]["e"] + pad, duration])
-        removed += [[s, e, "pause", ""] for s, e in silences]
+                add_silence(prev["e"] + pad, nxt["s"] - pad)
+            add_silence(kept_words[-1]["e"] + pad, duration)
+        why = "pause (waveform-refined)" if a.waveform else "pause"
+        removed += [[s, e, why, ""] for s, e in silences]
 
     cuts = merge([[max(0.0, s), min(duration, e)] for s, e, *_ in removed if e - s > 0.02])
     keep, cur = [], 0.0
@@ -127,6 +172,7 @@ def main():
         "clean_seconds": round(clean_len, 3), "removed_seconds": removed_s,
         "keep_frames": frames, "keep_seconds": seconds,
         "removed": removed, "audio_levels": stats,
+        "waveform_refine": a.waveform, "silence_db": a.silence_db if a.waveform else None,
         "clean_audio": mp3, "clean_wav": wav,
         "note": "Frames and clean audio share the same timeline; cut_from_audio.py muxes them directly.",
     }
@@ -135,6 +181,7 @@ def main():
     print(json.dumps({
         "source_seconds": round(info["duration"], 2), "clean_seconds": round(clean_len, 2),
         "removed_seconds": removed_s, "retake_cuts": len(edits.get("remove", [])),
+        "waveform_refine": a.waveform, "silence_db": a.silence_db if a.waveform else None,
         "pieces_kept": len(frames), "clean_audio": mp3,
         "keep_ranges": os.path.join(work, "keep_ranges.json"),
         "next": "transcribe the final MP3 (speech-to-text), then run cut_from_audio.py",

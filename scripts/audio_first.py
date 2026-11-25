@@ -51,6 +51,8 @@ def main():
     ap.add_argument("--pause", type=float, default=0.3)
     ap.add_argument("--min-gap", type=float, default=0.6)
     ap.add_argument("--no-silence", action="store_true")
+    ap.add_argument("--waveform", action="store_true", help="refine transcript silences with the waveform (never cuts inside words)")
+    ap.add_argument("--silence-db", type=float, default=-40.0, help="waveform silence threshold in dBFS (default: -40)")
     ap.add_argument("--skip-stt", action="store_true", help="use the draft transcript from the raw video instead of transcribing the final audio")
     ap.add_argument("--no-cut", action="store_true", help="stop after the final audio + script are ready")
     a = ap.parse_args()
@@ -76,6 +78,8 @@ def main():
     clean_args = ["--pause", a.pause, "--min-gap", a.min_gap, "--source", src]
     if a.no_silence:
         clean_args.append("--no-silence")
+    if a.waveform:
+        clean_args += ["--waveform", "--silence-db", a.silence_db]
     call("clean_audio.py", work, *clean_args)
 
     kr = json.load(open(os.path.join(work, "keep_ranges.json"), encoding="utf-8"))
