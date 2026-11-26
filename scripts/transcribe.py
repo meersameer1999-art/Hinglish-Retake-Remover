@@ -9,8 +9,9 @@ Creates the project folder (default: next to the video, named <video name>_edit)
   edit.json        project settings shared by the other scripts
 
 Free and offline after the first run (the model downloads once, then stays cached).
-Defaults: English uses 'small.en' on CPU and 'large-v3-turbo' on an NVIDIA GPU.
-Hindi and mixed Hindi/English always use 'large-v3-turbo', since smaller models are weak at Hindi.
+Defaults: CPU uses 'small.en' for English and 'small' for Hindi/Hinglish (about 20x faster than
+'turbo' on CPU, e.g. 122s of audio in ~5.5 minutes). With an NVIDIA GPU, non-English uses
+'large-v3-turbo' for maximum accuracy. Override any time with --model NAME.
 """
 import argparse
 import json
@@ -111,7 +112,12 @@ def main():
     lang = a.lang.lower()
     cuda = has_cuda()
     whisper_lang = "hi" if lang == "hi-roman" else lang
-    model = a.model or ("large-v3-turbo" if lang != "en" or cuda else "small.en")
+    if a.model:
+        model = a.model
+    elif cuda:
+        model = "small.en" if lang == "en" else "large-v3-turbo"
+    else:
+        model = "small.en" if lang == "en" else "small"
     if lang == "auto" and model.endswith(".en"):
         lang = "en"
     print(f"loading Whisper '{model}' ({'GPU' if cuda and a.device != 'cpu' else 'CPU'}). The first run downloads it once.", flush=True)
