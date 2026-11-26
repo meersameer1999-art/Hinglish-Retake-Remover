@@ -15,6 +15,18 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from common import die  # noqa: E402
+from transcribe import write_txt  # noqa: E402
+
+# Small Whisper often misspells Hinglish/Hindi words. Fix the known ones so the on-screen
+# cards and the saved script are clean. Keys are punctuation-stripped tokens.
+CORRECTIONS = {
+    "लेसर": "लेसन", "नमब": "नंबर", "नमरे": "नंबर", "तारगेट": "टारगेट",
+    "एन्तिटार": "एन्टिटी", "एन्र्जी": "एनर्जी", "पजा": "पैज़", "गुरुब": "गुरु",
+    "क्रेटिबलीटी": "क्रेडिबिलिटी", "बडाव": "बढ़ाव", "टेरेटेरी": "टेरिटरी",
+    "अन्ट्रस्ट्फ्री": "अनट्रस्टेड", "नीष": "नीच",
+    "ज़ा": "ज़्यादा", "कुन": "कौन", "श्टर्टीजी": "स्ट्रैटेजी", "श्टर्टिजी": "स्ट्रैटेजी",
+    "सी": "सी", "अमे": "आप", "ame": "आप", "chikni": "चाहिए", "chahi": "चाहिए",
+}
 
 KEY = re.compile(
     r"\d|लेसन|नम्बर|नंबर|शेर|टार्गेट|गुरु|स्ट्रैटेजी|क्रेटिबिल|टेरिटरी|बिजनिस|"
@@ -24,7 +36,27 @@ STOP = {"that", "this", "with", "have", "आप", "हैं", "है", "से
 
 
 def token(s):
-    return re.sub(r"[^\w\u0900-\u097F ]", "", str(s)).strip()
+    s = re.sub(r"[^\w\u0900-\u097F ]", "", str(s)).strip()
+    return CORRECTIONS.get(s, s)
+
+
+def fix_script(work, path, tr):
+    """Write the cleaned words back to transcript.json/txt so the saved script matches the cards."""
+    fixed = 0
+    for w in tr.get("words", []):
+        old = w.get("w", "")
+        bare = re.sub(r"[^\w\u0900-\u097F ]", "", str(old)).strip()
+        new = CORRECTIONS.get(bare)
+        if new and new != old:
+            w["w"] = new
+            fixed += 1
+    json.dump(tr, open(path, "w", encoding="utf-8"), ensure_ascii=False, indent=0)
+    txt = os.path.join(work, "transcript_edited.txt")
+    if os.path.exists(txt):
+        write_txt(txt, tr.get("words", []), float(tr.get("duration") or 0),
+                  "Cleaned script (speech-to-text of the FINAL CLEANED audio)",
+                  note="Times are seconds in cut.mp4 / final.mp4.")
+    return fixed
 
 
 def split_segments(words, gap=1.2):
@@ -52,7 +84,8 @@ def pick_beats(words, duration, max_beats=5):
     beats = []
     for _, seg in scored[:max_beats]:
         items = [token(w["w"]) for w in seg]
-        items = [x for x in items if len(x) > 2 and x.lower() not in STOP][:3]
+        items = [x for x in items if len(x) > 2 and x.lower() not in STOP]
+        items = [x for i, x in enumerate(items) if i == 0 or x != items[i - 1]][:3]
         while len(items) < 2:
             items.append("•")
         t0 = round(seg[0]["s"], 2)
@@ -110,6 +143,7 @@ def main():
     ap.add_argument("work")
     ap.add_argument("--style", default="warm-canvas")
     ap.add_argument("--max-beats", type=int, default=5)
+    ap.add_argument("--no-fix-script", action="store_true", help="keep the raw STT words in the saved script")
     a = ap.parse_args()
     work = os.path.abspath(a.work)
     path = os.path.join(work, "transcript_edited.json")
@@ -119,10 +153,11 @@ def main():
     duration = float(tr.get("duration") or 0)
     if duration <= 0:
         die("transcript_edited.json has no duration")
+    fixed = 0 if a.no_fix_script else fix_script(work, path, tr)
     beats = pick_beats(tr.get("words", []), duration, a.max_beats)
     story = os.path.join(work, "story.js")
     open(story, "w", encoding="utf-8").write(make_js(beats, duration))
-    print(json.dumps({"story": story, "duration": round(duration, 2),
+    print(json.dumps({"story": story, "duration": round(duration, 2), "words_fixed": fixed,
                       "beats": beats, "note": "Edit story.js any time, then just run render.py WORK."},
                      indent=1, ensure_ascii=False))
 
